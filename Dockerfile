@@ -20,4 +20,4 @@ RUN mkdir build && cd build && cmake .. && make
 EXPOSE 8080
 
 # Run the binary
-CMD ["./build/HtmlJsonExtractor"]
+CMD ["./build/TrainTicketsAvailProvider"]

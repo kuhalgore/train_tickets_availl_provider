@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: train-tickets-provider
+    env: docker
+    repo: https://github.com/kuhalgore/train_tickets_availl_provider
+    branch: main
+    dockerfilePath: Dockerfile
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /
+    envVars:
+      - key: SMTP_USER
+        value: kushal.gore@gmail.com
+      - key: SMTP_PASS
+        value: qooszbmbfgoflmog
