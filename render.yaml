@@ -10,7 +10,6 @@ services:
     healthCheckPath: /
     envVars:
       - key: SMTP_USER
-        value: kushal.gore@gmail.com
       - key: SMTP_PASS
       - key: PORT
         value: 18080
