@@ -1,5 +1,9 @@
 FROM ubuntu:22.04
 
+# Install standalone Asio
+RUN git clone https://github.com/chriskohlhoff/asio.git /tmp/asio && \
+    cp -r /tmp/asio/asio/include/asio /usr/local/include/
+
 # Install dependencies
 RUN apt-get update && apt-get install -y \
     g++ cmake git libboost-all-dev libssl-dev libcurl4-openssl-dev \
