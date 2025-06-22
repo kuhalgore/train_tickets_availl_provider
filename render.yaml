@@ -12,4 +12,5 @@ services:
       - key: SMTP_USER
         value: kushal.gore@gmail.com
       - key: SMTP_PASS
-        value: qooszbmbfgoflmog
+      - key: PORT
+        value: 18080
