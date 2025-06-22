@@ -1,20 +1,12 @@
 FROM ubuntu:22.04
-
-# Install dependencies
-RUN apt-get update && apt-get install -y \
-    g++ cmake git libboost-all-dev libssl-dev libcurl4-openssl-dev \
-    wget unzip autoconf automake libtool
-
-
-# Install build tools and dependencies
-RUN apt-get update && apt-get install -y \
-    g++ cmake git libboost-all-dev libssl-dev libcurl4-openssl-dev \
-    wget unzip autoconf automake libtool pkg-config
-
    
-# Build and install htmlcxx
+RUN apt-get update && apt-get install -y \
+    g++ cmake git libboost-all-dev libssl-dev libcurl4-openssl-dev \
+    autoconf automake libtool pkg-config
+
 RUN git clone https://github.com/dhoerl/htmlcxx.git /tmp/htmlcxx && \
     cd /tmp/htmlcxx && \
+    autoreconf -i && \
     ./configure && \
     make && make install && \
     ldconfig
