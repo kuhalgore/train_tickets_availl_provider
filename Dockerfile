@@ -5,7 +5,13 @@ RUN apt-get update && apt-get install -y \
     g++ cmake git libboost-all-dev libssl-dev libcurl4-openssl-dev \
     wget unzip autoconf automake libtool
 
-# Install htmlcxx from source
+
+# Install build tools and dependencies
+RUN apt-get update && apt-get install -y \
+    g++ cmake git libboost-all-dev libssl-dev libcurl4-openssl-dev \
+    wget unzip autoconf automake libtool pkg-config
+
+# Build and install htmlcxx
 RUN git clone https://github.com/dhoerl/htmlcxx.git /tmp/htmlcxx && \
     cd /tmp/htmlcxx && \
     ./bootstrap && \
