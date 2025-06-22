@@ -45,17 +45,20 @@ void sendMail(const std::string &receipient, const std::string &sub, const std::
     
     try {
         // Compose the message
-        //mailio::mail_message message;
         mailio::message message;
-        message.from(mailio::mail_address("Sender", "kushal.gore@gmail.com"));
+        std::string senderEmail = std::getenv("SMTP_USER");
+        std::string senderPassword = std::getenv("SMTP_PASS");
+        
+        message.from(mailio::mail_address("Sender", senderEmail));
         message.add_recipient(mailio::mail_address("Recipient", receipient));
         message.subject(sub);
         message.content(body);
 
         // Configure SMTP with Gmail (use port 465 for SSL)
         mailio::smtps gmail_smtp("smtp.gmail.com", 465);
-        gmail_smtp.authenticate("kushal.gore@gmail.com", "qooszbmbfgoflmog", mailio::smtps::auth_method_t::LOGIN);
+        gmail_smtp.authenticate(senderEmail, senderPassword, mailio::smtps::auth_method_t::LOGIN);
         gmail_smtp.submit(message);
+
 
         std::cout << "✅ Email sent successfully!" << std::endl;
     } catch (const std::exception& ex) {
@@ -64,11 +67,10 @@ void sendMail(const std::string &receipient, const std::string &sub, const std::
     
 }
 
-std::string createResponse(const std::string & url)
+std::string createResponse(const std::string & url, const::std::string recieverEmail, int noOfdays)
 {
     std::string retVal = "";
     
-    //std::string url = "https://www.goibibo.com/trains/dsrp/BGM/PUNE/20250630/GN/";
     std::string html = fetch_html(url);
     
     htmlcxx::HTML::ParserDom parser;
@@ -93,13 +95,13 @@ std::string createResponse(const std::string & url)
                 json_text = script_block.substr(open, close - open);
                 
                 std::cout<<"\n----------------------";
-                std::cout<<"\njosn_text = "<<json_text<<std::endl;
+                //std::cout<<"\njosn_text = "<<json_text<<std::endl;
                 std::cout<<"\n----------------------";
 
                 try {
                     auto json_obj = nlohmann::json::parse(json_text);
                     retVal = json_obj.dump(2);
-                    std::cout << "✅ Parsed JSON:\n" << retVal << std::endl;
+                    std::cout << "✅ Parsed JSON:\n"; //<< retVal << std::endl;
                 } catch (const std::exception& e) {
                     std::cerr << "❌ JSON parsing failed: " << e.what() << std::endl;
                 }
@@ -108,8 +110,9 @@ std::string createResponse(const std::string & url)
         }
     }
     
-    //sendMail("shridevi18gem@gmail.com", "Mail from krg", json_text);
-    std::cout<<"\nSent mail successfuly ........\n";
+    std::cout<<"\nsending mail to "<<recieverEmail <<" , subsribed for "<< noOfdays<< " , ........\n";
+    sendMail(recieverEmail, "Mail from krg json formatted", json_text);
+    
     
     return retVal;
     
@@ -145,8 +148,11 @@ int main() {
 
         std::string subject = "Trip Plan: " + src + " to " + dst;
         std::string body = "From: " + src + "\nTo: " + dst +
-                           "\nDate: " + date + "\nDuration: " + days +
-                           " days\n\nHave a great trip!\n\n";       
+                           "\nDate: " + date + 
+                           "\nDuration: " + days + " days" +
+                           "\nReciever Email : " + email +
+                           "\nNo of days to monitor : " + days +
+                           "\n\nHave a great trip!\n\n";       
                            
         std::string httpsUrl = "https://www.goibibo.com/trains/dsrp";
         httpsUrl += "/";
@@ -157,14 +163,18 @@ int main() {
         httpsUrl += date;
         httpsUrl += "/GN/";
         
-        std::string urlResponse = createResponse(httpsUrl);
-        body += urlResponse;
+        
         
 
         try {
-            //sendMail(email, subject, body);
-            std::cout<<"\nSent mail successfuly ........\n";
-            std::cout << "[INFO] Sent email to " << email << "\n";
+        
+            std::string urlResponse = createResponse(httpsUrl, email, std::stoi(days));
+            body += urlResponse;        
+            if(!urlResponse.empty())
+                std::cout << "[INFO] Sent email to " << email << "\n";
+            else
+                std::cout << "[INFO] email sending failed, " << email << "\n";
+            
             return crow::response(200, body + "\n\n Email sent! \n\n");
         } catch (const std::exception& ex) {
             std::cerr << "[ERROR] " << ex.what() << "\n";

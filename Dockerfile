@@ -17,7 +17,7 @@ COPY . .
 RUN mkdir build && cd build && cmake .. && make
 
 # Expose Crow's default port
-EXPOSE 8080
+EXPOSE 18080
 
 # Run the binary
 CMD ["./build/TrainTicketsAvailProvider"]
