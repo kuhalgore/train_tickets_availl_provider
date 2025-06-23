@@ -1,21 +1,16 @@
-FROM ubuntu:22.04
+# ---------- Stage 1: Build ----------
+FROM ubuntu:22.04 AS builder
 
-# Install dependencies (including git)
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     g++ cmake git libboost-all-dev libssl-dev libcurl4-openssl-dev \
     autoconf automake libtool pkg-config
 
-# Install standalone Asio   
+# Install standalone Asio
 RUN git clone https://github.com/chriskohlhoff/asio.git /tmp/asio && \
     cp /tmp/asio/asio/include/asio.hpp /usr/local/include/ && \
-    cp -r /tmp/asio/asio/include/asio /usr/local/include/
-
-# Install htmlcxx (CMake-based fork)
-RUN git clone https://github.com/pcoramasionwu/htmlcxx.git /tmp/htmlcxx && \
-    cd /tmp/htmlcxx && \
-    mkdir build && cd build && \
-    cmake .. && make && make install && \
-    ldconfig
+    cp -r /tmp/asio/asio/include/asio /usr/local/include/ && \
+    rm -rf /tmp/asio
 
 # Set working directory
 WORKDIR /app
@@ -26,5 +21,23 @@ COPY . .
 # Build the app
 RUN mkdir build && cd build && cmake .. && make
 
+# ---------- Stage 2: Runtime ----------
+FROM ubuntu:22.04
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    libboost-system-dev libssl-dev libcurl4-openssl-dev && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy built binary and any required runtime files
+COPY --from=builder /app/build/TrainTicketsAvailProvider ./TrainTicketsAvailProvider
+COPY --from=builder /app/libs ./libs
+
+# Set RPATH for shared libraries
+ENV LD_LIBRARY_PATH=/app/libs
+
 EXPOSE 18080
-CMD ["./build/TrainTicketsAvailProvider"]
+CMD ["./TrainTicketsAvailProvider"]

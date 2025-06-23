@@ -2,7 +2,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-#include <htmlcxx/html/ParserDom.h>
+#include <gumbo.h>
 #include <curl/curl.h>
 #include "json.hpp"
 #include <message.hpp>
@@ -67,48 +67,56 @@ void sendMail(const std::string &receipient, const std::string &sub, const std::
     
 }
 
-std::string createResponse(const std::string & url, const::std::string recieverEmail, int noOfdays)
-{
-    std::string retVal = "";
-    
-    std::string html = fetch_html(url);
-    
-    htmlcxx::HTML::ParserDom parser;
-    tree<htmlcxx::HTML::Node> dom = parser.parseTree(html);
-    std::string json_text = "";
-    
-    for (auto it = dom.begin(); it != dom.end(); ++it) {
-        if (it->tagName() == "script") {
-            it->parseAttributes();
-            auto id_attr = it->attribute("id");
-            if (id_attr.first && id_attr.second == "__NEXT_DATA__") {
-                // Get start and end positions of the node
-                size_t start = it->offset();
-                size_t end = start + it->length();
+void extract_next_data_script(const std::string& html, std::string& retVal, std::string& json_text) {
+    GumboOutput* output = gumbo_parse(html.c_str());
 
-                // Extract the full <script>...</script> block
-                std::string script_block = html.substr(start, end - start);
+    std::function<void(const GumboNode*)> search_script;
+    search_script = [&](const GumboNode* node) {
+        if (node->type != GUMBO_NODE_ELEMENT) return;
 
-                // Now extract the content between the tags
-                size_t open = script_block.find('>') + 1;
-                size_t close = script_block.rfind("</script>");
-                json_text = script_block.substr(open, close - open);
-                
-                std::cout<<"\n----------------------";
-                //std::cout<<"\njosn_text = "<<json_text<<std::endl;
-                std::cout<<"\n----------------------";
+        const GumboElement& element = node->v.element;
+        if (element.tag == GUMBO_TAG_SCRIPT) {
+            GumboAttribute* id_attr = gumbo_get_attribute(&element.attributes, "id");
+            if (id_attr && std::string(id_attr->value) == "__NEXT_DATA__") {
+                // Extract inner text of the <script> tag
+                for (unsigned int i = 0; i < element.children.length; ++i) {
+                    GumboNode* child = static_cast<GumboNode*>(element.children.data[i]);
+                    if (child->type == GUMBO_NODE_TEXT) {
+                        json_text = child->v.text.text;
 
-                try {
-                    auto json_obj = nlohmann::json::parse(json_text);
-                    retVal = json_obj.dump(2);
-                    std::cout << "✅ Parsed JSON:\n"; //<< retVal << std::endl;
-                } catch (const std::exception& e) {
-                    std::cerr << "❌ JSON parsing failed: " << e.what() << std::endl;
+                        std::cout << "\n----------------------\n";
+                        try {
+                            auto json_obj = nlohmann::json::parse(json_text);
+                            retVal = json_obj.dump(2);
+                            std::cout << "✅ Parsed JSON:\n";
+                        } catch (const std::exception& e) {
+                            std::cerr << "❌ JSON parsing failed: " << e.what() << std::endl;
+                        }
+                        std::cout << "----------------------\n";
+                        return;
+                    }
                 }
-                break;
             }
         }
-    }
+
+        // Recurse into children
+        const GumboVector* children = &element.children;
+        for (unsigned int i = 0; i < children->length; ++i) {
+            search_script(static_cast<GumboNode*>(children->data[i]));
+        }
+    };
+
+    search_script(output->root);
+    gumbo_destroy_output(&kGumboDefaultOptions, output);
+}
+
+std::string createResponse(const std::string & url, const::std::string recieverEmail, int noOfdays)
+{
+    std::string html = fetch_html(url);
+    std::string retVal;
+    std::string json_text;
+    extract_next_data_script(html, retVal, json_text);
+
     
     std::cout<<"\nsending mail to "<<recieverEmail <<" , subsribed for "<< noOfdays<< " , ........\n";
     sendMail(recieverEmail, "Mail from krg json formatted", json_text);
