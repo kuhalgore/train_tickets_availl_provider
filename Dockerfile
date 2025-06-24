@@ -3,35 +3,39 @@ FROM ubuntu:22.04 AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
-    g++ cmake git libboost-all-dev libssl-dev libcurl4-openssl-dev \
-    autoconf automake libtool pkg-config
+    g++ cmake git libssl-dev libboost-all-dev \
+    autoconf automake libtool pkg-config make zlib1g-dev
 
-# Set working directory
+# Build libcurl from source
+WORKDIR /tmp
+RUN git clone https://github.com/curl/curl.git && cd curl && \
+    ./buildconf && ./configure --with-ssl && make -j$(nproc) && make install
+
+# Build Mailio from source
+RUN git clone https://github.com/karastojko/mailio.git && \
+    cd mailio && mkdir build && cd build && \
+    cmake .. && make -j$(nproc) && make install
+
+# Build your app
 WORKDIR /app
-
-# Copy source code
 COPY . .
-
-# Build the app
 RUN mkdir build && cd build && cmake .. && make
 
 # ---------- Stage 2: Runtime ----------
 FROM ubuntu:22.04
 
-# Install runtime dependencies only
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y \
-    libboost-system-dev libssl-dev libcurl4-openssl-dev && \
+    libssl-dev libboost-system-dev zlib1g && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+# Copy built libraries and binary
+COPY --from=builder /usr/local/lib /usr/local/lib
+COPY --from=builder /usr/local/include /usr/local/include
+COPY --from=builder /app/build/TrainTicketsAvailProvider /app/TrainTicketsAvailProvider
+
 WORKDIR /app
-
-# Copy built binary and any required runtime files
-COPY --from=builder /app/build/TrainTicketsAvailProvider ./TrainTicketsAvailProvider
-COPY --from=builder /app/libs ./libs
-
-# Set RPATH for shared libraries
-ENV LD_LIBRARY_PATH=/app/libs
+ENV LD_LIBRARY_PATH=/usr/local/lib
 
 EXPOSE 18080
 CMD ["./TrainTicketsAvailProvider"]
