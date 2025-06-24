@@ -1,10 +1,12 @@
 # ---------- Stage 1: Build ----------
 FROM ubuntu:22.04 AS builder
 
-# Install build dependencies
+# Install build dependencies   
 RUN apt-get update && apt-get install -y \
     g++ cmake git libssl-dev libboost-all-dev \
-    autoconf automake libtool pkg-config make zlib1g-dev
+    autoconf automake libtool pkg-config make zlib1g-dev \
+    libpsl-dev
+
 
 # Build libcurl from source
 WORKDIR /tmp
