@@ -23,17 +23,18 @@ WORKDIR /app
 COPY . .
 RUN mkdir build && cd build && cmake .. && make
 
-# ---------- Stage 2: Runtime ----------
+# ---------- Runtime ----------
 FROM ubuntu:22.04
 
-# Install runtime dependencies
 RUN apt-get update && apt-get install -y \
-    libssl-dev libboost-system-dev zlib1g && \
+    libssl-dev zlib1g && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy built libraries and binary
+# Copy Boost and other libs from builder
 COPY --from=builder /usr/local/lib /usr/local/lib
 COPY --from=builder /usr/local/include /usr/local/include
+
+# Copy your app binary
 COPY --from=builder /app/build/TrainTicketsAvailProvider /app/TrainTicketsAvailProvider
 
 WORKDIR /app
@@ -41,3 +42,4 @@ ENV LD_LIBRARY_PATH=/usr/local/lib
 
 EXPOSE 18080
 CMD ["./TrainTicketsAvailProvider"]
+
