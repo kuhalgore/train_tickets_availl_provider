@@ -6,12 +6,6 @@ RUN apt-get update && apt-get install -y \
     g++ cmake git libboost-all-dev libssl-dev libcurl4-openssl-dev \
     autoconf automake libtool pkg-config
 
-# Install standalone Asio
-RUN git clone https://github.com/chriskohlhoff/asio.git /tmp/asio && \
-    cp /tmp/asio/asio/include/asio.hpp /usr/local/include/ && \
-    cp -r /tmp/asio/asio/include/asio /usr/local/include/ && \
-    rm -rf /tmp/asio
-
 # Set working directory
 WORKDIR /app
 

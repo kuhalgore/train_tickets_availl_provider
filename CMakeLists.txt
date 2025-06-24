@@ -10,6 +10,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_executable(TrainTicketsAvailProvider main.cpp)
 add_definitions(-DMAILIO_EXPORT=)
 
+target_compile_definitions(TrainTicketsAvailProvider PRIVATE CROW_USE_BOOST)
+
+
 add_library(gumbo STATIC
     third_party/gumbo/attribute.c
     third_party/gumbo/parser.c
