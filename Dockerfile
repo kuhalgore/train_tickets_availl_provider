@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
-    wget \
+    curl \
     build-essential \
     cmake \
     git \
@@ -16,12 +16,12 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     zlib1g-dev \
     libpsl-dev \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install Boost 1.74.0 (regex only)
 WORKDIR /tmp
-RUN wget https://boostorg.jfrog.io/artifactory/main/release/1.74.0/source/boost_1_74_0.tar.gz && \
+RUN curl -L -o boost_1_74_0.tar.gz https://boostorg.jfrog.io/artifactory/main/release/1.74.0/source/boost_1_74_0.tar.gz && \
     tar xzf boost_1_74_0.tar.gz && \
     cd boost_1_74_0 && \
     ./bootstrap.sh --with-libraries=regex && \
@@ -29,16 +29,16 @@ RUN wget https://boostorg.jfrog.io/artifactory/main/release/1.74.0/source/boost_
     cd / && rm -rf /tmp/boost_1_74_0 /tmp/boost_1_74_0.tar.gz
 
 # Build libcurl from source
-RUN git clone https://github.com/curl/curl.git && \
-    cd curl && ./buildconf && ./configure --with-ssl && \
+RUN git clone https://github.com/curl/curl.git /tmp/curl && \
+    cd /tmp/curl && ./buildconf && ./configure --with-ssl && \
     make -j$(nproc) && make install && \
-    cd / && rm -rf /tmp/curl
+    rm -rf /tmp/curl
 
 # Build Mailio from source
-RUN git clone https://github.com/karastojko/mailio.git && \
-    cd mailio && mkdir build && cd build && \
+RUN git clone https://github.com/karastojko/mailio.git /tmp/mailio && \
+    cd /tmp/mailio && mkdir build && cd build && \
     cmake .. && make -j$(nproc) && make install && \
-    cd / && rm -rf /tmp/mailio
+    rm -rf /tmp/mailio
 
 # Build your app
 WORKDIR /app
@@ -50,8 +50,8 @@ FROM ubuntu:22.04
 
 RUN apt-get update && apt-get install -y \
     libssl-dev \
-    zlib1g \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    zlib1g && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy Boost, Mailio, libcurl, and your app binary
 COPY --from=builder /usr/local/lib /usr/local/lib
