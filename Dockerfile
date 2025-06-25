@@ -1,9 +1,7 @@
 # ---------- Stage 1: Build ----------
 FROM ubuntu:22.04 AS builder
-
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install build dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     build-essential \
@@ -17,8 +15,11 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     libpsl-dev \
     ca-certificates \
-    libboost-regex-dev && \
-    rm -rf /var/lib/apt/lists/*
+    # ← add all Boost components Mailio/CMakeLists wants:
+    libboost-system-dev \
+    libboost-thread-dev \
+    libboost-regex-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Build libcurl from source
 RUN git clone https://github.com/curl/curl.git /tmp/curl && \
@@ -37,22 +38,23 @@ WORKDIR /app
 COPY . .
 RUN mkdir build && cd build && cmake .. && make
 
-# ---------- Runtime ----------
+# ---------- Stage 2: Runtime ----------
 FROM ubuntu:22.04
 
 RUN apt-get update && apt-get install -y \
     libssl-dev \
     zlib1g \
-    libboost-regex-dev && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    # these for runtime dynamic linking:
+    libboost-system-dev \
+    libboost-thread-dev \
+    libboost-regex-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy built libraries and app binary
 COPY --from=builder /usr/local/lib /usr/local/lib
 COPY --from=builder /usr/local/include /usr/local/include
 COPY --from=builder /app/build/TrainTicketsAvailProvider /app/TrainTicketsAvailProvider
 
 WORKDIR /app
 ENV LD_LIBRARY_PATH=/usr/local/lib
-
 EXPOSE 18080
 CMD ["./TrainTicketsAvailProvider"]
