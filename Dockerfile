@@ -1,3 +1,14 @@
+# before build step
+RUN apt-get update && apt-get install -y wget build-essential
+
+RUN wget https://boostorg.jfrog.io/artifactory/main/release/1.74.0/source/boost_1_74_0.tar.gz && \
+    tar xzf boost_1_74_0.tar.gz && \
+    cd boost_1_74_0 && \
+    ./bootstrap.sh --with-libraries=regex && \
+    ./b2 install
+
+ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+
 # ---------- Stage 1: Build ----------
 FROM ubuntu:22.04 AS builder
 
