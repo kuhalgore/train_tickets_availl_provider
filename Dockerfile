@@ -21,12 +21,12 @@ RUN apt-get update && apt-get install -y \
 
 # Install Boost 1.74.0 (regex only)
 WORKDIR /tmp
-RUN curl -L -o boost_1_74_0.tar.gz https://boostorg.jfrog.io/artifactory/main/release/1.74.0/source/boost_1_74_0.tar.gz && \
-    tar xzf boost_1_74_0.tar.gz && \
+RUN curl -L -o boost_1_74_0.tar.bz2 https://sourceforge.net/projects/boost/files/boost/1.74.0/boost_1_74_0.tar.bz2/download && \
+    tar xjf boost_1_74_0.tar.bz2 && \
     cd boost_1_74_0 && \
     ./bootstrap.sh --with-libraries=regex && \
     ./b2 install && \
-    cd / && rm -rf /tmp/boost_1_74_0 /tmp/boost_1_74_0.tar.gz
+    cd / && rm -rf /tmp/boost_1_74_0 /tmp/boost_1_74_0.tar.bz2
 
 # Build libcurl from source
 RUN git clone https://github.com/curl/curl.git /tmp/curl && \
