@@ -16,17 +16,9 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     zlib1g-dev \
     libpsl-dev \
-    ca-certificates && \
+    ca-certificates \
+    libboost-regex-dev && \
     rm -rf /var/lib/apt/lists/*
-
-# Install Boost 1.74.0 (regex only)
-WORKDIR /tmp
-RUN curl -L -o boost_1_74_0.tar.bz2 https://sourceforge.net/projects/boost/files/boost/1.74.0/boost_1_74_0.tar.bz2/download && \
-    tar xjf boost_1_74_0.tar.bz2 && \
-    cd boost_1_74_0 && \
-    ./bootstrap.sh --with-libraries=regex && \
-    ./b2 install && \
-    cd / && rm -rf /tmp/boost_1_74_0 /tmp/boost_1_74_0.tar.bz2
 
 # Build libcurl from source
 RUN git clone https://github.com/curl/curl.git /tmp/curl && \
@@ -50,10 +42,11 @@ FROM ubuntu:22.04
 
 RUN apt-get update && apt-get install -y \
     libssl-dev \
-    zlib1g && \
+    zlib1g \
+    libboost-regex-dev && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy Boost, Mailio, libcurl, and your app binary
+# Copy built libraries and app binary
 COPY --from=builder /usr/local/lib /usr/local/lib
 COPY --from=builder /usr/local/include /usr/local/include
 COPY --from=builder /app/build/TrainTicketsAvailProvider /app/TrainTicketsAvailProvider
