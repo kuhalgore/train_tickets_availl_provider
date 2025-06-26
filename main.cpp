@@ -169,7 +169,7 @@ int main() {
             return crow::response(400, "Invalid number of days");
         }
 
-        const std::string BASE_URL = "https://www.goibibo.com/trains/dsrp";
+        const std::string BASE_URL = "https://goibibo-proxy.kushal-gore-cpp.workers.dev/?url=https://www.goibibo.com/trains/dsrp";// "https://www.goibibo.com/trains/dsrp";
         std::string httpsUrl = BASE_URL + "/" + src + "/" + dst + "/" + date + "/GN/";
 
         bool emailSent = false;
