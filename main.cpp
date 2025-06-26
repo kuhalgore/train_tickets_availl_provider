@@ -8,7 +8,7 @@
 #include <message.hpp>
 #include <smtp.hpp>
 #include <crow_all.h>
-
+#include <optional>
 
 // Callback to write received data into a std::string
 static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
@@ -18,39 +18,40 @@ static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* use
     return totalSize;
 }
 
-std::string fetch_html(const std::string& url) {
+std::optional<std::string> fetch_html(const std::string& url) {
     CURL* curl = curl_easy_init();
-    std::string html;
-
-    if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L); // follow redirects
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &html);
-        curl_easy_setopt(curl, CURLOPT_USERAGENT, "htmljson-parser/1.0");
-
-        CURLcode res = curl_easy_perform(curl);
-        if (res != CURLE_OK) {
-            std::cerr << "❌ curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
-        }
-
-        curl_easy_cleanup(curl);
+    if (!curl) {
+        std::cerr << "❌ Failed to initialize cURL" << std::endl;
+        return std::nullopt; // Return an empty optional
     }
 
-    return html;
+    std::string html;
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &html);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "htmljson-parser/1.0");
+
+    CURLcode res = curl_easy_perform(curl);
+    if (res != CURLE_OK) {
+        std::cerr << "❌ curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+        curl_easy_cleanup(curl);
+        return std::nullopt; // Return an empty optional on failure
+    }
+
+    curl_easy_cleanup(curl);
+    return html; // Return the fetched HTML
 }
 
-void sendMail(const std::string &receipient, const std::string &sub, const std::string &body)
-{
-    
+void sendMail(const std::string &recipient, const std::string &sub, const std::string &body) {
     try {
         // Compose the message
         mailio::message message;
         std::string senderEmail = std::getenv("SMTP_USER");
         std::string senderPassword = std::getenv("SMTP_PASS");
-        
+
         message.from(mailio::mail_address("Sender", senderEmail));
-        message.add_recipient(mailio::mail_address("Recipient", receipient));
+        message.add_recipient(mailio::mail_address("Recipient", recipient));
         message.subject(sub);
         message.content(body);
 
@@ -59,12 +60,10 @@ void sendMail(const std::string &receipient, const std::string &sub, const std::
         gmail_smtp.authenticate(senderEmail, senderPassword, mailio::smtps::auth_method_t::LOGIN);
         gmail_smtp.submit(message);
 
-
         std::cout << "✅ Email sent successfully!" << std::endl;
     } catch (const std::exception& ex) {
         std::cerr << "❌ Error: " << ex.what() << std::endl;
     }
-    
 }
 
 void extract_next_data_script(const std::string& html, std::string& retVal, std::string& json_text) {
@@ -110,25 +109,25 @@ void extract_next_data_script(const std::string& html, std::string& retVal, std:
     gumbo_destroy_output(&kGumboDefaultOptions, output);
 }
 
-std::string createResponse(const std::string & url, const::std::string recieverEmail, int noOfdays)
-{
-    std::string html = fetch_html(url);
+std::string createResponse(const std::string &url, const std::string &receiverEmail, int noOfDays) {
+    auto htmlOpt = fetch_html(url);
+    if (!htmlOpt) {
+        std::cerr << "❌ Failed to fetch HTML from URL: " << url << std::endl;
+        return ""; // Return empty response on failure
+    }
+
+    std::string html = *htmlOpt;
     std::string retVal;
     std::string json_text;
     extract_next_data_script(html, retVal, json_text);
 
-    
-    std::cout<<"\nsending mail to "<<recieverEmail <<" , subsribed for "<< noOfdays<< " , ........\n";
-    sendMail(recieverEmail, "Mail from krg json formatted", json_text);
-    
-    
+    std::cout << "\nsending mail to " << receiverEmail << " , subscribed for " << noOfDays << " , ........\n";
+    sendMail(receiverEmail, "Mail from krg json formatted", json_text);
+
     return retVal;
-    
-    
 }
 
 int main() {
-    
     crow::SimpleApp app;
 
     // Health check
@@ -136,16 +135,14 @@ int main() {
         std::cout << "[INFO] Health check\n";
         return "OK";
     });
-    
+
     // GET-based email trigger
-    CROW_ROUTE(app, "/send")
-    ([](const crow::request& req) {
+    CROW_ROUTE(app, "/send")([](const crow::request& req) {
         const auto& url = req.url_params;
 
         if (!url.get("src") || !url.get("dst") || !url.get("date") ||
-            !url.get("email_id") || !url.get("no_of_days")) 
-            {
-                return crow::response(400, "Missing required parameters");
+            !url.get("email_id") || !url.get("no_of_days")) {
+            return crow::response(400, "Missing required parameters");
         }
 
         std::string src = url.get("src");
@@ -154,35 +151,35 @@ int main() {
         std::string email = url.get("email_id");
         std::string days = url.get("no_of_days");
 
+        int noOfDays;
+        try {
+            noOfDays = std::stoi(days);
+            if (noOfDays <= 0) {
+                return crow::response(400, "Invalid number of days");
+            }
+        } catch (const std::invalid_argument&) {
+            return crow::response(400, "Invalid number of days");
+        }
+
         std::string subject = "Trip Plan: " + src + " to " + dst;
         std::string body = "From: " + src + "\nTo: " + dst +
                            "\nDate: " + date + 
-                           "\nDuration: " + days + " days" +
-                           "\nReciever Email : " + email +
-                           "\nNo of days to monitor : " + days +
+                           "\nDuration: " + std::to_string(noOfDays) + " days" +
+                           "\nReceiver Email: " + email +
+                           "\nNo of days to monitor: " + std::to_string(noOfDays) +
                            "\n\nHave a great trip!\n\n";       
-                           
-        std::string httpsUrl = "https://www.goibibo.com/trains/dsrp";
-        httpsUrl += "/";
-        httpsUrl += src;
-        httpsUrl += "/";
-        httpsUrl += dst;
-        httpsUrl += "/";
-        httpsUrl += date;
-        httpsUrl += "/GN/";
-        
-        
-        
+
+        const std::string BASE_URL = "https://www.goibibo.com/trains/dsrp";
+        std::string httpsUrl = BASE_URL + "/" + src + "/" + dst + "/" + date + "/GN/";
 
         try {
-        
-            std::string urlResponse = createResponse(httpsUrl, email, std::stoi(days));
+            std::string urlResponse = createResponse(httpsUrl, email, noOfDays);
             body += urlResponse;        
-            if(!urlResponse.empty())
+            if (!urlResponse.empty())
                 std::cout << "[INFO] Sent email to " << email << "\n";
             else
-                std::cout << "[INFO] email sending failed, " << email << "\n";
-            
+                std::cout << "[INFO] Email sending failed, " << email << "\n";
+
             return crow::response(200, body + "\n\n Email sent! \n\n");
         } catch (const std::exception& ex) {
             std::cerr << "[ERROR] " << ex.what() << "\n";
@@ -193,19 +190,6 @@ int main() {
     int port = std::getenv("PORT") ? std::stoi(std::getenv("PORT")) : 8080;
     std::cout << "[INFO] Running on port " << port << "\n";
     app.port(port).multithreaded().run();
-    
-    
+
     return 0;
-}
-
-
-std::string read_file_to_string(const std::string& filepath) {
-    std::ifstream file(filepath, std::ios::in | std::ios::binary); // binary avoids newline translation
-    if (!file) {
-        throw std::ios_base::failure("Failed to open file: " + filepath);
-    }
-
-    std::ostringstream buffer;
-    buffer << file.rdbuf(); // read entire file into buffer
-    return buffer.str();    // convert to string
 }
