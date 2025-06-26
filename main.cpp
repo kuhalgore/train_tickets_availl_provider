@@ -18,6 +18,8 @@ static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* use
 }
 
 std::optional<std::string> fetch_html(const std::string& url) {
+    std::cout << "[DEBUG] fetch_html() - Attempting to fetch: " << url << "\n";
+
     CURL* curl = curl_easy_init();
     if (!curl) {
         std::cerr << "❌ Failed to initialize cURL\n";
@@ -25,20 +27,33 @@ std::optional<std::string> fetch_html(const std::string& url) {
     }
 
     std::string html;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Accept: text/html,application/xhtml+xml");
+    headers = curl_slist_append(headers, "Accept-Language: en-US,en;q=0.9");
+    headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &html);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "htmljson-parser/1.0");
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L); // prevent hanging
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
+    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);  // For detailed trace in Render logs
 
     CURLcode res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
         std::cerr << "❌ curl_easy_perform() failed: " << curl_easy_strerror(res) << "\n";
+        curl_slist_free_all(headers);
         curl_easy_cleanup(curl);
         return std::nullopt;
     }
 
+    long response_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+    std::cout << "[DEBUG] HTTP response code: " << response_code << "\n";
+
+    curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
     return html;
 }
