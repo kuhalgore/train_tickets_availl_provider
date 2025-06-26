@@ -10,7 +10,6 @@
 #include <crow_all.h>
 #include <optional>
 
-// Callback to write received data into a std::string
 static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
     size_t totalSize = size * nmemb;
     std::string* buffer = static_cast<std::string*>(userp);
@@ -21,8 +20,8 @@ static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* use
 std::optional<std::string> fetch_html(const std::string& url) {
     CURL* curl = curl_easy_init();
     if (!curl) {
-        std::cerr << "❌ Failed to initialize cURL" << std::endl;
-        return std::nullopt; // Return an empty optional
+        std::cerr << "❌ Failed to initialize cURL\n";
+        return std::nullopt;
     }
 
     std::string html;
@@ -31,77 +30,75 @@ std::optional<std::string> fetch_html(const std::string& url) {
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &html);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "htmljson-parser/1.0");
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L); // prevent hanging
 
     CURLcode res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
-        std::cerr << "❌ curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+        std::cerr << "❌ curl_easy_perform() failed: " << curl_easy_strerror(res) << "\n";
         curl_easy_cleanup(curl);
-        return std::nullopt; // Return an empty optional on failure
+        return std::nullopt;
     }
 
     curl_easy_cleanup(curl);
-    return html; // Return the fetched HTML
+    return html;
 }
 
-void sendMail(const std::string &recipient, const std::string &sub, const std::string &body) {
+bool sendMail(const std::string& recipient, const std::string& sub, const std::string& body) {
     try {
-        // Compose the message
-        mailio::message message;
-        std::string senderEmail = std::getenv("SMTP_USER");
-        std::string senderPassword = std::getenv("SMTP_PASS");
+        std::string senderEmail = std::getenv("SMTP_USER") ? std::getenv("SMTP_USER") : "";
+        std::string senderPassword = std::getenv("SMTP_PASS") ? std::getenv("SMTP_PASS") : "";
 
+        if (senderEmail.empty() || senderPassword.empty()) {
+            std::cerr << "[WARN] SMTP credentials not set\n";
+            return false;
+        }
+
+        mailio::message message;
         message.from(mailio::mail_address("Sender", senderEmail));
         message.add_recipient(mailio::mail_address("Recipient", recipient));
         message.subject(sub);
         message.content(body);
 
-        // Configure SMTP with Gmail (use port 465 for SSL)
         mailio::smtps gmail_smtp("smtp.gmail.com", 465);
         gmail_smtp.authenticate(senderEmail, senderPassword, mailio::smtps::auth_method_t::LOGIN);
         gmail_smtp.submit(message);
 
-        std::cout << "✅ Email sent successfully!" << std::endl;
+        std::cout << "✅ Email sent to " << recipient << "\n";
+        return true;
     } catch (const std::exception& ex) {
-        std::cerr << "❌ Error: " << ex.what() << std::endl;
+        std::cerr << "❌ Email error: " << ex.what() << "\n";
+        return false;
     }
 }
 
 void extract_next_data_script(const std::string& html, std::string& retVal, std::string& json_text) {
     GumboOutput* output = gumbo_parse(html.c_str());
 
-    std::function<void(const GumboNode*)> search_script;
-    search_script = [&](const GumboNode* node) {
+    std::function<void(const GumboNode*)> search_script = [&](const GumboNode* node) {
         if (node->type != GUMBO_NODE_ELEMENT) return;
 
         const GumboElement& element = node->v.element;
         if (element.tag == GUMBO_TAG_SCRIPT) {
             GumboAttribute* id_attr = gumbo_get_attribute(&element.attributes, "id");
             if (id_attr && std::string(id_attr->value) == "__NEXT_DATA__") {
-                // Extract inner text of the <script> tag
                 for (unsigned int i = 0; i < element.children.length; ++i) {
                     GumboNode* child = static_cast<GumboNode*>(element.children.data[i]);
                     if (child->type == GUMBO_NODE_TEXT) {
                         json_text = child->v.text.text;
-
-                        std::cout << "\n----------------------\n";
                         try {
                             auto json_obj = nlohmann::json::parse(json_text);
                             retVal = json_obj.dump(2);
-                            std::cout << "✅ Parsed JSON:\n";
                         } catch (const std::exception& e) {
-                            std::cerr << "❌ JSON parsing failed: " << e.what() << std::endl;
+                            std::cerr << "❌ JSON parsing failed: " << e.what() << "\n";
                         }
-                        std::cout << "----------------------\n";
                         return;
                     }
                 }
             }
         }
 
-        // Recurse into children
-        const GumboVector* children = &element.children;
-        for (unsigned int i = 0; i < children->length; ++i) {
-            search_script(static_cast<GumboNode*>(children->data[i]));
+        for (unsigned int i = 0; i < element.children.length; ++i) {
+            search_script(static_cast<GumboNode*>(element.children.data[i]));
         }
     };
 
@@ -109,11 +106,12 @@ void extract_next_data_script(const std::string& html, std::string& retVal, std:
     gumbo_destroy_output(&kGumboDefaultOptions, output);
 }
 
-std::string createResponse(const std::string &url, const std::string &receiverEmail, int noOfDays) {
+std::string createResponse(const std::string& url, const std::string& receiverEmail, int noOfDays, bool& emailSuccess) {
     auto htmlOpt = fetch_html(url);
     if (!htmlOpt) {
-        std::cerr << "❌ Failed to fetch HTML from URL: " << url << std::endl;
-        return ""; // Return empty response on failure
+        std::cerr << "❌ Failed to fetch HTML from URL: " << url << "\n";
+        emailSuccess = false;
+        return "";
     }
 
     std::string html = *htmlOpt;
@@ -121,8 +119,8 @@ std::string createResponse(const std::string &url, const std::string &receiverEm
     std::string json_text;
     extract_next_data_script(html, retVal, json_text);
 
-    std::cout << "\nsending mail to " << receiverEmail << " , subscribed for " << noOfDays << " , ........\n";
-    sendMail(receiverEmail, "Mail from krg json formatted", json_text);
+    std::cout << "[INFO] Sending email to " << receiverEmail << " for " << noOfDays << " days\n";
+    emailSuccess = sendMail(receiverEmail, "Train Info JSON", json_text);
 
     return retVal;
 }
@@ -130,13 +128,10 @@ std::string createResponse(const std::string &url, const std::string &receiverEm
 int main() {
     crow::SimpleApp app;
 
-    // Health check
     CROW_ROUTE(app, "/health")([] {
-        std::cout << "[INFO] Health check\n";
         return "OK";
     });
 
-    // GET-based email trigger
     CROW_ROUTE(app, "/send")([](const crow::request& req) {
         const auto& url = req.url_params;
 
@@ -154,42 +149,36 @@ int main() {
         int noOfDays;
         try {
             noOfDays = std::stoi(days);
-            if (noOfDays <= 0) {
-                return crow::response(400, "Invalid number of days");
-            }
-        } catch (const std::invalid_argument&) {
+            if (noOfDays <= 0) return crow::response(400, "Invalid number of days");
+        } catch (...) {
             return crow::response(400, "Invalid number of days");
         }
-
-        std::string subject = "Trip Plan: " + src + " to " + dst;
-        std::string body = "From: " + src + "\nTo: " + dst +
-                           "\nDate: " + date + 
-                           "\nDuration: " + std::to_string(noOfDays) + " days" +
-                           "\nReceiver Email: " + email +
-                           "\nNo of days to monitor: " + std::to_string(noOfDays) +
-                           "\n\nHave a great trip!\n\n";       
 
         const std::string BASE_URL = "https://www.goibibo.com/trains/dsrp";
         std::string httpsUrl = BASE_URL + "/" + src + "/" + dst + "/" + date + "/GN/";
 
-        try {
-            std::string urlResponse = createResponse(httpsUrl, email, noOfDays);
-            body += urlResponse;        
-            if (!urlResponse.empty())
-                std::cout << "[INFO] Sent email to " << email << "\n";
-            else
-                std::cout << "[INFO] Email sending failed, " << email << "\n";
+        bool emailSent = false;
+        std::string urlResponse;
 
-            return crow::response(200, body + "\n\n Email sent! \n\n");
+        try {
+            urlResponse = createResponse(httpsUrl, email, noOfDays, emailSent);
         } catch (const std::exception& ex) {
-            std::cerr << "[ERROR] " << ex.what() << "\n";
-            return crow::response(500, ex.what());
+            std::cerr << "[ERROR] Exception: " << ex.what() << "\n";
+            return crow::response(500, "Internal server error");
         }
+
+        std::ostringstream body;
+        body << "From: " << src << "\nTo: " << dst
+             << "\nDate: " << date
+             << "\nDuration: " << noOfDays << " days"
+             << "\nReceiver Email: " << email
+             << "\n\nEmail status: " << (emailSent ? "✅ Sent" : "❌ Failed")
+             << "\n\nExtracted JSON:\n" << urlResponse;
+
+        return crow::response(200, body.str());
     });
 
     int port = std::getenv("PORT") ? std::stoi(std::getenv("PORT")) : 8080;
-    std::cout << "[INFO] Running on port " << port << "\n";
+    std::cout << "[INFO] Server starting on port " << port << "\n";
     app.port(port).multithreaded().run();
-
-    return 0;
 }
