@@ -19,8 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libboost-system-dev \
     libboost-thread-dev \
     libboost-regex-dev \
-    libboost-test-dev \  # Added Boost Unit Test Framework
-    && rm -rf /var/lib/apt/lists/*
+    libboost-test-dev && \  # Fixed: Removed backslash here
+    rm -rf /var/lib/apt/lists/*
 
 # Build libcurl from source
 RUN git clone https://github.com/curl/curl.git /tmp/curl && \
