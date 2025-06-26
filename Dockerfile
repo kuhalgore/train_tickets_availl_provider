@@ -46,6 +46,7 @@ FROM ubuntu:22.04
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     zlib1g \
+    libpsl-dev \
     libboost-system-dev \
     libboost-thread-dev \
     libboost-regex-dev \
