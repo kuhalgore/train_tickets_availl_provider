@@ -52,6 +52,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libboost-regex-dev \
     libboost-test-dev && \
     apt-get clean && rm -rf /var/lib/apt/lists/*  # Clean up package lists
+    
+RUN apt-get update && apt-get install -y ca-certificates
+
 
 # Copy necessary files from the builder stage
 COPY --from=builder /usr/local/lib /usr/local/lib
