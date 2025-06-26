@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libboost-system-dev \
     libboost-thread-dev \
     libboost-regex-dev \
+    libboost-test-dev \  # Added Boost Unit Test Framework
     && rm -rf /var/lib/apt/lists/*
 
 # Build libcurl from source
@@ -48,6 +49,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libboost-system-dev \
     libboost-thread-dev \
     libboost-regex-dev \
+    libboost-test-dev \  # Added Boost Unit Test Framework for runtime
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy necessary files from the builder stage
