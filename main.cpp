@@ -328,7 +328,7 @@ const std::string & src, const std::string & dst, const std::string & date) {
     
     std::string html = *htmlOpt;
 
-    /*
+    
     std::string retVal;
     std::string json_text;
     extract_next_data_script(html, retVal, json_text);
@@ -343,9 +343,9 @@ const std::string & src, const std::string & dst, const std::string & date) {
     //return classes.dump(4);
     
     std::string output = extractInRequiredFormat(classes);//
-    */
+    
 
-    std::string output = html;//
+    //std::string output = html;//
     
     std::cout << "[INFO] Sending email to " << receiverEmail << " for " << noOfDays << " days\n";
     emailSuccess = sendMail(receiverEmail, std::string("Train Info JSON ") +  src + " - " + dst + " on " + date, output);
@@ -398,9 +398,9 @@ int main() {
         return crow::response(400, "Invalid number of days");
     }
 
-    //const std::string BASE_URL = "https://www.goibibo.com/trains/dsrp";
-    //std::string httpsUrl = BASE_URL + "/" + src + "/" + dst + "/" + date + "/GN/";
-    std::string httpsUrl = "https://www.ixigo.com/search/result/train/BGM/PUNE/20082025//1/0/0/0/ALL";
+    const std::string BASE_URL = "https://www.goibibo.com/trains/dsrp";
+    std::string httpsUrl = BASE_URL + "/" + src + "/" + dst + "/" + date + "/GN/";
+    //std::string httpsUrl = "https://www.ixigo.com/search/result/train/BGM/PUNE/20082025//1/0/0/0/ALL";
 
     bool emailSent = false;
     std::string urlResponse;
