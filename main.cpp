@@ -355,12 +355,116 @@ const std::string & src, const std::string & dst, const std::string & date) {
 
 }
 
+const std::string BASE_URL = "https://www.goibibo.com/trains/dsrp";
+std::string getResponse(const std::string & email, const std::string &src, const std::string &dst, const std::string &date, int noOfDays)
+{
+    
+    std::string httpsUrl = BASE_URL + "/" + src + "/" + dst + "/" + date + "/GN/";
+    //std::string httpsUrl = "https://www.ixigo.com/search/result/train/BGM/PUNE/20082025//1/0/0/0/ALL";
+
+    bool emailSent = false;
+    std::string urlResponse;
+
+    try {
+        urlResponse = createResponse(httpsUrl, email, noOfDays, emailSent, src, dst, date);
+    } catch (const std::exception& ex) {
+        std::cerr << "[ERROR] Exception: " << ex.what() << "\n";
+        return "Internal server error";
+    }
+
+    return urlResponse;
+
+}
+
+struct Job
+{
+    std::string src;
+    std::string dst;
+    std::string date;
+    std::string email_id;
+    int no_of_days;
+    std::chrono::time_point<std::chrono::system_clock> entry_point;
+
+    std::string to_string()
+    {
+        return "src=" + src + " | " + "dst=" + dst + " |  " + "date="+ date + 
+        " | " + "no_of_days="+ std::to_string(no_of_days) + " | " + "sent to=" + email_id;
+    }
+};
+
+std::vector<Job> jobQueue;
+std::mutex queueMutex;
+
+void jobScheduler()
+{
+    while(true)
+    {
+        
+        {// this block is essential, as we are aquiring lock inside the block
+
+            std::cout<<"\n thread : waking up --> ";
+            std::lock_guard<std::mutex> lock(queueMutex);
+            auto now = std::chrono::system_clock::now();
+            
+            jobQueue.erase(std::remove_if(jobQueue.begin(), jobQueue.end(), 
+                [&](const Job & job){  
+                    auto elapsed = std::chrono::duration_cast<std::chrono::hours>(now - job.entry_point);
+                    return elapsed > std::chrono::hours(job.no_of_days*24);}
+                    ), jobQueue.end());
+            
+            for(auto& job: jobQueue)
+            {
+                auto elapsed = std::chrono::duration_cast<std::chrono::hours>(now - job.entry_point);
+                std::cout<<"\n hours elapsed : "<<elapsed.count();
+
+                if(elapsed <= std::chrono::hours(job.no_of_days*24 ))
+                {
+
+
+                    bool emailSent = false;
+                    
+                    
+                    auto now = std::chrono::system_clock::now(); // Get current time point
+                    std::time_t now_c = std::chrono::system_clock::to_time_t(now); // Convert to time_t
+                    // Format and print the timestamp
+                    std::cout<<'\n'<<std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S")
+                    <<"From thread : fetching details for the job  --> "<<job.to_string();
+                
+
+                    std::string urlResponse = getResponse(job.email_id, job.src, job.dst, job.date, job.no_of_days);
+
+                    std::ostringstream body;
+                    body << "<pre>"
+                        << "From: " << job.src << "\nTo: " << job.dst
+                        << "\nDate: " << job.date
+                        << "\nDuration: " << job.no_of_days << " days"
+                        << "\nReciever Email: " << job.email_id
+                        << "\n\nEmail status: " << (emailSent ? "✅ Sent" : "❌ Failed")
+                        << "\n\nExtracted JSON:\n" << urlResponse
+                        << "</pre>";
+
+                }
+
+            }
+        } // ending this block here, makes sure that this thread has not taken any lock before going to sleep
+
+        std::cout<<"\n thread : sleeping for 60 mins --> ";
+        std::this_thread::sleep_for(std::chrono::minutes(60));
+    }
+
+}
+
+
 int main() {
+    
+
     crow::SimpleApp app;
+    std::thread t(jobScheduler);
 
     CROW_ROUTE(app, "/health")([] {
         return "OK";
     });
+
 
     CROW_ROUTE(app, "/send")([](const crow::request& req) {
     const auto& url = req.url_params;
@@ -398,7 +502,7 @@ int main() {
         return crow::response(400, "Invalid number of days");
     }
 
-    const std::string BASE_URL = "https://www.goibibo.com/trains/dsrp";
+    
     std::string httpsUrl = BASE_URL + "/" + src + "/" + dst + "/" + date + "/GN/";
     //std::string httpsUrl = "https://www.ixigo.com/search/result/train/BGM/PUNE/20082025//1/0/0/0/ALL";
 
@@ -417,15 +521,25 @@ int main() {
          << "From: " << src << "\nTo: " << dst
          << "\nDate: " << date
          << "\nDuration: " << noOfDays << " days"
-         << "\nReceiver Email: " << email
+         << "\nReciever Email: " << email
          << "\n\nEmail status: " << (emailSent ? "✅ Sent" : "❌ Failed")
          << "\n\nExtracted JSON:\n" << urlResponse
          << "</pre>";
+
+    auto now = std::chrono::system_clock::now();
+    Job newJob{src, dst, date, email, noOfDays,  now};
+    {
+        std::lock_guard<std::mutex> lk(queueMutex);
+        jobQueue.push_back(newJob);
+    }
 
     return crow::response(200, body.str());
 });
 
     int port = std::getenv("PORT") ? std::stoi(std::getenv("PORT")) : 8080;
     std::cout << "[INFO] Server starting on port " << port << "\n";
-    app.port(port).multithreaded().run();
+    //app.port(port).multithreaded().run();
+    app.port(port).run();
+
+    t.join();
 }
